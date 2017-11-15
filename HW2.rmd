@@ -1,0 +1,436 @@
+---
+title: "Ecophysiology-HW2"
+author: "Krishna"
+date: "October 27, 2017"
+output: pdf_document
+header-includes:
+   - \usepackage{float}
+   - \usepackage{graphicx}
+   - \usepackage{physics}
+graphics: yes
+---
+```{r global_options}
+  knitr::opts_chunk$set(fig.width=4, fig.height=4,
+                        fig.align="center", fig.path='Figs/', warning=FALSE,
+                        message=FALSE, fig.pos = 'h', 
+                        tidy.opts=list(width.cutoff=60),tidy=TRUE)
+  
+```
+
+```{r }
+rm(list=ls())
+setwd('D:/Krishna/Acads/Q4/Ecophysiology/HW')
+library(ggplot2)
+library(reshape2)
+library(latex2exp)
+library(knitr)
+theme=theme_light()+theme(plot.title = element_text(hjust = 0.5),text = element_text(size=7))
+```
+
+# Problem 1
+
+Assumptions:
+
+  1. Simulation run for 5000 years in each case. It is assumed that this is enough time for an equilibrium to establish. However, it can be seen that not all pools reach steady state completely. eg. NEP $\approx$ 0 but not exactly = 0.  
+  
+## Part a)
+
+To calculate NEP, we know that
+NEP=GPP-$R_h - R_a$  
+$\therefore NEP=NPP-R_h$
+
+```{r }
+simulate = function(df,NPP,dec,title=''){
+  Rh=0.4
+  for (t in seq(2,dim(df)[1],1))
+  {
+    df$P[t]=df$P[t-1]+NPP[t-1]- df$P[t-1]*0.02*dec[t-1]
+    df$L[t]=df$L[t-1]+df$P[t-1]*0.02*dec[t-1]-df$L[t-1]*0.5*dec[t-1]
+    df$F[t]=df$F[t-1]+df$L[t-1]*0.5*(1-Rh)*dec[t-1]-df$F[t-1]*0.2*dec[t-1]
+    df$S[t]=df$S[t-1]+df$F[t-1]*0.2*(1-Rh)*dec[t-1]-df$S[t-1]*0.02*dec[t-1]
+    df$M[t]=df$M[t-1]+df$S[t-1]*0.02*(1-Rh)*dec[t-1]-df$M[t-1]*0.002*dec[t-1]
+    df$NEP[t]=NPP[t-1]-df$L[t-1]*0.5*Rh*dec[t-1]-df$F[t-1]*0.2*Rh*dec[t-1]-df$S[t-1]*0.02*Rh*dec[t-1]-df$M[t-1]*0.002*dec[t-1]
+    df$year[t] = df$year[t-1]+1
+  }
+  df.m<- melt(df[df$year>=min(df$year)+1,],'year')
+  g=ggplot(df.m, aes(year, value, colour = variable)) + geom_line(size=1) +facet_wrap(~ variable, ncol = 2,scales = "free")+
+  labs(y='Carbon stock',title=paste('Trajectory of all pools, \n',title))+theme
+  return(list(df,g))
+}
+
+```
+
+
+```{r }
+year.end=5000
+df=data.frame(matrix(ncol=7,nrow=year.end))
+colnames(df) = c('year','P','L','F','S','M','NEP')
+df$year=seq(0,year.end-1)
+df[df$year==0,]=rep(0,dim(df)[2])
+df$NEP[1]=500
+NPP=rep(500,dim(df)[1])
+dec=rep(1.0,dim(df)[1])
+ret=simulate(df,NPP,dec,'Base Case')
+df=ret[[1]]
+ret[[2]]
+kable(tail(df,1),caption='$Equilibrium\\ carbon\\ concentration\\ (g\\ C\\ m^{-2}\\ y^{-1})$')
+df.master=df
+```
+
+All graphs here onwards are presented from and onwards the equilibrium state, which as mentioned before is 5000 years.  
+
+## Part b)
+
+```{r }
+df[1,]=tail(df.master,1)
+NPP=1.2*NPP
+ret=simulate(df,NPP,dec,'20% increase in NPP')
+df=ret[[1]]
+ret[[2]]
+kable(tail(df,1),caption='$Equilibrium\\ carbon\\ concentration\\ (g\\ C\\ m^{-2}\\ y^{-1})$')
+```
+
+
+  1. Increasing NPP by 20\% shifts the equilibrium state of each pool up by 20\%. This is because the shift in NPP introduces a chain reaction untill each pool finds its respective equilibrium state. NPP is the primary input supply and thus controls the state of all other pools downstream.  
+  2. NEP on the other hand, jumps to 100g $gCm^{-2}y{-1}$ as a result of it being directly proportional to NPP. Once the new equilibrium is established and heterogenous respiration balances out NPP, NEP dies down to zero. 
+  3. The time required to reach equilibrium in each case appears to be the same as that of initial base case. This means that the time required to establish steady state is independent of quantum of change introduced in the system.  
+  4. The passive pool takes the longest to reach steady state because its decay rate is the slowest.  
+
+## Part c)  
+
+Assumption:  
+
+  1. Rate of increase of NPP is assumed to be 0.2% $\textbf{compounded}$ annually. 
+
+```{r }
+NPP.inc=500
+for (t in seq(2,dim(df)[1])){
+  if (t<=100){
+    NPP.inc[t]=NPP.inc[t-1]*1.002
+  } else{
+    NPP.inc[t]=NPP.inc[t-1]
+  }
+}
+ret=simulate(df,NPP.inc,dec,'0.2% per year increase in NPP for 100 years')
+df=ret[[1]]
+ret[[2]]
+kable(tail(df,1),caption='$Equilibrium\\ carbon\\ concentration\\ (g\\ C\\ m^{-2}\\ y^{-1})$')
+```
+
+
+  1. All pools again take the same time to reach their new steady states. The magnitude of the shift is directly proportional to the total final increase in NPP which is roughly 1.22 times are 22\% ($1.002^100 = 1.22$). 
+  2. NEP increases proportional to NPP for the first 100 years and then exponentially decays untill $R_h$ increases to cancel out NPP.  
+  
+
+## Part d)
+
+```{r }
+dec.inc=dec
+for (t in seq(2,dim(df)[1])){
+  if (t<=100){
+    dec.inc[t]=dec.inc[t-1]*1.002
+  } else{
+    dec.inc[t]=dec.inc[t-1]
+  }
+}
+NPP=rep(500,dim(df)[1])
+ret=simulate(df,NPP,dec.inc,'0.2% per year increase in dec for 100 years')
+df=ret[[1]]
+ret[[2]]
+kable(tail(df,1),caption='$Equilibrium\\ carbon\\ concentration\\ (g\\ C\\ m^{-2}\\ y^{-1})$')
+```
+  
+  1. As the decomposition rate increases,the pools shift downward untill equilibrium is established. 
+  2. The net downward shift is by about 22\% which is the total increase in decomposition rate.  
+  3. The time taken to establish equilibrium is similar to that Part c.  
+  
+  
+## Part e)
+
+```{r }
+ret=simulate(df,NPP.inc,dec.inc,'0.2% per year increase in dec & NPP for 100 years')
+df=ret[[1]]
+ret[[2]]
+kable(tail(df,1),caption='$Equilibrium\\ carbon\\ concentration\\ (g\\ C\\ m^{-2}\\ y^{-1})$')
+```
+
+*Note: Scales for M and NEP are extremely zoomed intentially to shows that 5000 years was not enough for it to reach equilibrium state. Essentially, for inference purposes, all lines are flat.   
+
+  1. The decomposition rate increase is balanced by NPP increase resulting in no net change of pools.  
+
+# Problem 2  
+
+## Part a)
+
+Penman Monteith equation for evapotranspiration is given by
+
+$$
+\begin{aligned}  
+ET_o &= \frac{\Delta (R_n - G) +\rho_a c_p (\delta e) g_a}{(\Delta +\gamma (1+ g_a/g_s))L_v} \\
+where\quad  g_a &= \frac{\kappa^2 u_a}{ln^2\frac{z}{z_o}}\\
+&= \frac{0.41^2 \times 1}{ln^2\frac{2}{0.1\times h_c}}\\
+\& \quad \delta_e &= VPD = e^*(T) - e(T)\\
+&= e^*(T)\times (1-R.H.)\\
+But\quad e^*(T) = e^*(20) &= 6.1094e^{\frac{17.625\times 20}{20+243.04}}\\
+&= 23.33\ hPa= 2333\ Pa \\
+\therefore \delta_e &= 23.33\times (1 - 0.65) = 8.17\ hPa\\
+\Delta &= \pdv{e^*}{T} = \frac{\lambda\times e^*}{R_v \times T^2}\\
+&= \frac{40680\ J.mol^{-1} \times 23.33\ hPa}{8.314\ J.mol^{-1}. K^{-1} \times 293.01^2\ K^2}\\
+&= 1.33\ hPa.K^{-1} = 133\ Pa. K^{-1}\\
+\therefore ET_o &= \frac{133\ Pa. K^{-1} \times (280- 25)\ W.m^{-2} + 1.2\ Kg. m^{-3} \times 1000\ J.Kg^{-1}.K^{-1}\times 817\ Pa \times g_a}{(133\ Pa. K^{-1} + 66\ Pa.K^{-1}(1+g_a/gs))\ 2.453\times 10^9\ J.m^{-3}}\\
+&= \frac{(33915\  + 980400\times g_a )Pa.K^{-1}.W.m^{-2}}{(133+ 66(1+g_a/g_s))\times 2.453\times 10^9\ Pa.K^{-1}.J.m^{-3}}\\
+{g_s}_1 &= \frac{1}{30} = 0.033\ m.s^{-1}\\
+{g_a}_1 &= 9.53\times 10^{-3}\ m.s^{-1}\\
+\&\\
+{g_s}_2 &= \frac{1}{60} = 0.017\ m.s^{-1}\\
+{g_a}_2 &= 18.7 \times 10^{-3}\ m.s^{-1}\\
+\therefore {ET_o}_1 &= 6.99 mm.day^{-1}
+&\\
+\therefore {ET_o}_2 &= 6.74 mm.day^{-1}
+\end{aligned}
+$$
+```{r}
+ET = function(ga,gs){
+  et=(33915 + 980400*ga)/((133+66*(1+ga/gs))*2.453*10^9)
+  et=1000*et*60*60*24
+  return(et)
+}
+gs1=1/30
+ga1=9.53e-3
+gs2=1/60
+ga2=18.7e-3
+# ET(ga1,gs1)
+```
+
+## Part b)  
+
+```{r}
+mag.roch = function(T){
+  e=6.1094*exp(1)^((17.625*T)/(T+243.04))
+  return(100*e)
+}
+mag.roch.inv = function(e){
+  e.corr=log(e/6.1094)
+  T=e.corr*243.04/(17.625-e.corr)
+  return(T)
+}
+rho.air = 1.2
+Cp=1000
+Ta=20
+# ra=1/ga
+Rn=280
+G=25
+RH=0.65
+eps=0.622
+P=1000e2
+lambda = 2.26e6
+Lv = 2.458e9
+e.star.air = mag.roch(Ta)
+e.air=RH*e.star.air
+qa=eps*e.air/(P-0.378*e.air)
+option=1
+for (ra in c(1/ga1,1/ga2)){
+  Tl=0
+  Tl.new= 10
+  while (abs(Tl.new-Tl)>=1e-5){
+    Tl=Tl.new
+    H=rho.air*Cp*(Tl-Ta)/ra
+    LE=Rn-H-G
+    ET=LE/lambda
+    qs=ET*ra/rho.air+qa
+    e.leaf=qs*P/(eps+0.378*qs)
+    Tl.new=mag.roch.inv(e.leaf/100)
+  }
+  ET=LE/Lv*60*60*24*1000
+  print(paste('Option ',option,':'))
+  print(paste('Leaf temperature = ',round(Tl.new,2),' C'))
+  print(paste('LE = ',round(LE),' W/m2'))
+  print(paste('ET = ',round(ET,2),' mm/day'))
+  option=option+1
+}
+```
+
+## Part c)  
+
+  1. In both cases, the Penman Monteith equation is found to underestimate the evpotranspiration.  
+  2. The difference is due to the assumption in part a that leaf temperature is same as air temperature which is clearly not the case as seen in part b. 
+  3. This assumption of equal temperature causes us to ignore sensible heat, thus resulting in an underestimation of ET in part a.  
+  
+
+# Problem 3 
+
+## Part a)
+
+Assumptions:
+
+  1. Leaf is saturated with water.  
+  2. The stomatal conductance with respect to water is greater than that with respect to CO2 (by a factor of 1.6) 
+```{r}
+RH = seq(.20,.70,0.01)
+P=100e3
+ci=230e-6*P
+ca=380e-6*P
+ei=mag.roch(30) # RH = 1
+ea = mag.roch(28)*RH
+WUE = 1.6e-1*abs(ci-ca)/abs(ei-ea)
+df=data.frame(cbind(RH,WUE))
+colnames(df) = c('RH','WUE')
+g=ggplot(df,aes(RH,WUE))
+g+geom_line(size=2)+
+  labs(x='Relative Humidity in air',
+       y='Water Use efficiency',
+       title='Water use efficiency versus\n relative humidity')+
+  theme+
+  scale_x_continuous(labels = scales::percent)
+```
+
+## Part b)  
+
+```{r }
+Tl = seq(24,32,0.1)
+RH = 0.4
+ei=mag.roch(Tl) # RH = 1
+ea = mag.roch(28)*RH
+WUE = 1.6*abs(ci-ca)/abs(ei-ea)
+df=data.frame(cbind(Tl,WUE))
+colnames(df) = c('Tl','WUE')
+g=ggplot(df,aes(Tl,WUE))
+g+geom_line(size=2)+
+  labs(x=TeX('Leaf temperature (^oC)'),
+       y='Water Use efficiency',
+       title='Water use efficiency versus\n Leaf temperature')+
+  theme
+```
+
+  1. WUE increases with increase in relative humidity because for the same assimilation of carbon, there is lesser transpiration occuring due to decrease in gradient.  
+  2. WUE decreases with increase in leaf temperature because of increased transpiration.  
+  3. However, WUE is roughly 3 times more sensitive to per degree change of leaf temperature as compared to per \% change in relative humidity.  
+  
+
+# Problem 4    
+
+Assumptions:  
+
+  1. Net rate of photosynthesis is piecewise linear.
+  
+## Part a)
+
+```{r }
+Qp=1500
+Epsm = 0.08
+Km=300
+Ki=300e3
+Rd=1.5e-6
+Vm=100
+CCa=38
+O=210e3
+alpha=0.8
+beta=0.98
+tau=2.6e3
+theta=0.95
+pi=seq(0,800,1)
+Tau.star=O/2/tau
+Kapp=Km*(1+O/Ki)
+
+pht=function(a=alpha,E=Epsm,p=pi,T=Tau.star,V=Vm,K=Kapp,Q=Qp){
+  Je= a*E*Q*(p-T)/(p+2*T)
+  Jc=V*(p-T)/(p+K)
+  Js=V/2
+  df=data.frame(p,Jc,Je,Js)
+  colnames(df)=c('cCO2','Jc','Je','Js')
+  return(df)
+}
+
+df=pht()
+df2=melt(df,id.vars='cCO2')
+g=ggplot(df2,aes(cCO2,value,color=variable))
+g+geom_line(size=2)+
+  labs(x=TeX('Leaf internal CO_2 concentration ($\\mu$mol/mol)'),y=TeX('Photosynthesis ($\\mu$mol. m^{-2}s^{-1})'),title=TeX('Photosynthesis Vs internal CO_2 concentration'))+theme
+
+```
+
+ ## Part b)
+```{r }
+net.pht=function(df){
+  df$An <- apply(df[,2:4],1,min) - Rd
+  df$limited.by = colnames(df[,2:4])[apply(df[,2:4],1,which.min)]
+  return(df)
+}
+df=net.pht(df)
+g=ggplot(df,aes(cCO2,An,color=limited.by))
+g+geom_line(size=2)+
+  labs(x=TeX('Leaf internal CO_2 concentration (ppm)'),
+       y=TeX('Net Photosynthesis  ($\\mu$ mol. m^{-2}s^{-1})'),
+       title=TeX('Net Photosynthesis Vs internal CO_2 concentration'))+
+  theme
+```
+
+ ## Part c)
+```{r }
+Qp=seq(0,2000,1)
+pi.range=c(20,30,50,70)*10
+df.master=data.frame(Qp)
+colnames(df.master)='Qp'
+for (pi.s in pi.range){
+  df=pht(p=pi.s)
+  df=net.pht(df)
+  df.master[paste('CO2=',pi.s)]=df$An 
+}
+
+df2=melt(df.master,id.vars='Qp')
+g=ggplot(df2,aes(Qp,value,color=variable))
+g+geom_line(size=2)+
+  labs(x=TeX('PAR ($\\mu$molm^{-2}s^{-1})'),
+       y=TeX('Net Photosynthesis ($\\mu$mol. m^{-2}s^{-1})'),
+       title=TeX('Net Photosynthesis Vs PAR'))+
+  theme
+```
+
+# Problem 5
+Assumptions:   
+
+  1. Temperature induced parameter fluctuations are negligible. 
+  2. PAR = 1500 $\mu molm^{-2}s^{-1}$
+  
+
+```{r }
+df=read.csv('Aspen_CO2_curve.csv')
+
+g=ggplot(df,aes(Cc,A))
+g+geom_line(size=2)+
+  labs( x=TeX('Internal CO_2 concentration (ppm)') , 
+        y=TeX('Assimilation $\\mu$molm^{-2}s^{-1}') , 
+        title='Water use efficiency versus\n Leaf temperature')+
+  theme
+```
+
+
+```{r }
+Qp=1500
+norm <- function(x) (sum(x^2))
+rsq=function(Vm,df){
+  df.pred=pht(p=df$Cc,V=Vm)
+  df.pred=net.pht(df.pred)
+  An.pred=df.pred$An
+  err=norm(df$A-An.pred)
+  return(err)
+}
+Vm.int=c(1,400)
+fit=optimize(rsq,Vm.int,df=df)
+Vmax=fit$minimum
+df.pred=pht(p=df$Cc,V=Vmax)
+df.pred=net.pht(df.pred)
+df.pred=cbind.data.frame(df.pred[,c('cCO2','An')],df$A)
+colnames(df.pred)=c('cCO2','Predicted','Actual')
+df2=melt(df.pred,id.vars='cCO2')
+g=ggplot(df2,aes(cCO2,value,color=variable))
+g+geom_line(size=2) +
+  labs(x=TeX('Leaf internal CO_2 concentration (ppm)') , 
+       y=TeX('Net Photosynthesis  ($\\mu$ mol. m^{-2}s^{-1})') , 
+       title=TeX('Net Photosynthesis Vs internal CO_2 concentration'))+
+  theme
+
+```
+
+$V_m =$  `r round(Vmax,1)` $\mu. mol.m^{-2}.s^{-1}$ 
+
